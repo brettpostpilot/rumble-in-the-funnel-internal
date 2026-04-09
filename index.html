@@ -34,10 +34,9 @@ const P2_INFO={name:'MIKE "CAC ATTACK" EPSTEIN',shortName:"CAC ATTACK",tagline:"
 const keys={},justPressed={};
 document.addEventListener("keydown",e=>{
   if(screen==="enterName"){
-    if(e.key==="Tab"){e.preventDefault();activeField=activeField==="name"?"company":"name";return}
-    if(e.key==="Enter"){e.preventDefault();if(nameSubmitted)return;const err=validateEntry(nameInput,companyInput);if(err){entryError=err;return}entryError="";if(containsProfanity(nameInput)||containsProfanity(companyInput)){entryError="KEEP IT CLEAN, CHAMP!";return}nameSubmitted=true;submitScore(nameInput.trim(),companyInput.trim()||"\u2014",gameScore).then(()=>{screen="matchEnd";matchEndTimer=0});return}
-    if(e.key==="Backspace"){e.preventDefault();entryError="";if(activeField==="name")nameInput=nameInput.slice(0,-1);else companyInput=companyInput.slice(0,-1);return}
-    if(e.key.length===1&&!e.ctrlKey&&!e.metaKey){e.preventDefault();entryError="";if(activeField==="name"&&nameInput.length<20)nameInput+=e.key;else if(activeField==="company"&&companyInput.length<25)companyInput+=e.key;return}
+    if(e.key==="Enter"){e.preventDefault();if(nameSubmitted)return;const err=validateEntry(nameInput);if(err){entryError=err;return}entryError="";if(containsProfanity(nameInput)){entryError="KEEP IT CLEAN, CHAMP!";return}nameSubmitted=true;submitScore(nameInput.trim(),"",gameScore).then(()=>{screen="matchEnd";matchEndTimer=0});return}
+    if(e.key==="Backspace"){e.preventDefault();entryError="";nameInput=nameInput.slice(0,-1);return}
+    if(e.key.length===1&&!e.ctrlKey&&!e.metaKey){e.preventDefault();entryError="";if(nameInput.length<20)nameInput+=e.key;return}
     e.preventDefault();return}
   if(!keys[e.key])justPressed[e.key]=true;keys[e.key]=true;e.preventDefault()});
 document.addEventListener("keyup",e=>{keys[e.key]=false});
@@ -45,7 +44,7 @@ document.addEventListener("paste",e=>{
   if(screen!=="enterName")return;e.preventDefault();
   const text=(e.clipboardData||window.clipboardData).getData("text").replace(/[\r\n\t]/g,"");
   if(!text)return;if(containsProfanity(text)){entryError="KEEP IT CLEAN, CHAMP!";return}entryError="";
-  if(activeField==="name")nameInput=(nameInput+text).substring(0,20);else companyInput=(companyInput+text).substring(0,25)});
+  nameInput=(nameInput+text).substring(0,20)});
 const PK={left:"ArrowLeft",right:"ArrowRight",up:"ArrowUp",down:"ArrowDown",jab:"z",hook:"x",upper:"c",special:"v"};
 
 // ═══════ FIREBASE ═══════
@@ -59,16 +58,16 @@ async function fetchLeaderboard(){
   }catch(e){console.warn("LB fetch:",e);leaderboardLoaded=true}}
 
 async function submitScore(name,company,score){
-  if(containsProfanity(name)||containsProfanity(company)){entryError="KEEP IT CLEAN, CHAMP!";nameSubmitted=false;return}
+  if(containsProfanity(name)){entryError="KEEP IT CLEAN, CHAMP!";nameSubmitted=false;return}
   try{await fetch(FIREBASE_URL+LB_PATH+".json",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name,company,score,date:new Date().toISOString()})});await fetchLeaderboard()}catch(e){console.warn("Submit:",e)}}
+    body:JSON.stringify({name,score,date:new Date().toISOString()})});await fetchLeaderboard()}catch(e){console.warn("Submit:",e)}}
 fetchLeaderboard();
 
 // ═══════ PROFANITY FILTER ═══════
 const BLOCKED_WORDS=["fuck","shit","ass","damn","bitch","bastard","dick","cock","pussy","cunt","whore","slut","fag","faggot","nigger","nigga","retard","rape","penis","vagina","boob","tits","titty","anus","dildo","jizz","cum","wank","piss","crap","twat","douche","hoe","milf","porn","sexy","nude","naked","erotic","orgasm","blowjob","handjob","butthole","asshole","dumbass","jackass","dipshit","bullshit","motherfuck","fucker","stfu","wtf","lmao","thot","simp","incel","nazi","hitler","kill","murder","suicide","terrorist","bomb","shoot","drug","cocaine","heroin","meth","weed","marijuana"];
 function normalizeText(t){return t.toLowerCase().replace(/[@4]/g,"a").replace(/[3]/g,"e").replace(/[1!|]/g,"i").replace(/[0]/g,"o").replace(/[5\$]/g,"s").replace(/[7]/g,"t").replace(/[+]/g,"t").replace(/ph/g,"f").replace(/[^a-z]/g,"")}
 function containsProfanity(t){if(!t||!t.trim())return false;const n=normalizeText(t);for(const w of BLOCKED_WORDS)if(n.includes(w))return true;const s=t.toLowerCase().replace(/[^a-z]/g,"");for(const w of BLOCKED_WORDS)if(s.includes(w))return true;const words=t.toLowerCase().split(/\s+/);for(const wd of words){const c=wd.replace(/[^a-z]/g,"");for(const b of BLOCKED_WORDS)if(c===b)return true}return false}
-function validateEntry(name,company){if(name.trim().length===0)return"ENTER YOUR NAME";if(name.trim().length<2)return"NAME TOO SHORT";if(containsProfanity(name))return"KEEP IT CLEAN, CHAMP!";if(company&&containsProfanity(company))return"KEEP IT CLEAN, CHAMP!";if(/^(.)\1{4,}$/.test(name.trim()))return"NICE TRY \u2014 ENTER A REAL NAME";return null}
+function validateEntry(name){if(name.trim().length===0)return"ENTER YOUR NAME";if(name.trim().length<2)return"NAME TOO SHORT";if(containsProfanity(name))return"KEEP IT CLEAN, CHAMP!";if(/^(.)\1{4,}$/.test(name.trim()))return"NICE TRY \u2014 ENTER A REAL NAME";return null}
 
 // ═══════ SCORING ═══════
 let gameScore=0,nameInput="",companyInput="",activeField="name",nameSubmitted=false;
@@ -476,12 +475,11 @@ function drawLeaderboard(startX,startY,maxW){
   ctx.fillStyle=C.gold;ctx.font="bold 11px 'Courier New'";ctx.textAlign="center";ctx.fillText("\u2605 TOP FIGHTERS \u2605",cx2,startY);
   if(!leaderboardLoaded){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("Loading...",cx2,startY+18);return startY+30}
   if(leaderboard.length===0){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("No scores yet \u2014 be the first!",cx2,startY+18);return startY+30}
-  const cR=startX+4,cN=startX+24,cC=startX+maxW*0.55,cS=startX+maxW-4;let ly=startY+16;
-  ctx.fillStyle=C.steel;ctx.font="bold 8px 'Courier New'";ctx.textAlign="left";ctx.fillText("#",cR,ly);ctx.fillText("NAME",cN,ly);ctx.fillText("COMPANY",cC,ly);ctx.textAlign="right";ctx.fillText("SCORE",cS,ly);
+  const cR=startX+4,cN=startX+30,cS=startX+maxW-4;let ly=startY+16;
+  ctx.fillStyle=C.steel;ctx.font="bold 8px 'Courier New'";ctx.textAlign="left";ctx.fillText("#",cR,ly);ctx.fillText("NAME",cN,ly);ctx.textAlign="right";ctx.fillText("SCORE",cS,ly);
   ly+=4;dp(startX,ly,maxW,1,C.steel+"40");ly+=8;
   leaderboard.forEach((entry,i)=>{const top3=i<3;ctx.textAlign="left";ctx.fillStyle=top3?C.gold:C.linen;ctx.font=(top3?"bold ":"")+"9px 'Courier New'";
-    ctx.fillText(String(i+1),cR,ly);ctx.fillStyle=top3?C.green:C.linen;ctx.fillText((entry.name||"???").substring(0,16),cN,ly);
-    ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText((entry.company||"\u2014").substring(0,14),cC,ly);
+    ctx.fillText(String(i+1),cR,ly);ctx.fillStyle=top3?C.green:C.linen;ctx.fillText((entry.name||"???").substring(0,20),cN,ly);
     ctx.textAlign="right";ctx.fillStyle=top3?C.gold:C.lime;ctx.fillText(String(entry.score||0),cS,ly);ly+=14});return ly}
 
 function drawEnterName(){
@@ -492,26 +490,18 @@ function drawEnterName(){
   ctx.fillStyle=C.linen;ctx.font="bold 28px 'Courier New'";ctx.fillText("SCORE: "+gameScore,cx2,110);
   ctx.fillStyle=C.lime;ctx.font="bold 10px 'Courier New'";ctx.fillText("ENTER YOUR NAME FOR THE LEADERBOARD",cx2,148);
   const fW=260,fH=28,fX=cx2-fW/2;
-  const nA=activeField==="name";
   ctx.fillStyle=C.steel;ctx.font="bold 9px 'Courier New'";ctx.textAlign="left";ctx.fillText("YOUR NAME",fX,172);
-  dp(fX,176,fW,fH,nA?"#1A1A30":"#111118");ctx.strokeStyle=nA?C.green:C.steel+"60";ctx.lineWidth=nA?2:1;ctx.strokeRect(fX,176,fW,fH);
+  dp(fX,176,fW,fH,"#1A1A30");ctx.strokeStyle=C.green;ctx.lineWidth=2;ctx.strokeRect(fX,176,fW,fH);
   ctx.fillStyle=C.linen;ctx.font="14px 'Courier New'";ctx.textAlign="left";
-  ctx.fillText(nameInput+(nA&&frame%40<25?"_":""),fX+8,195);
+  ctx.fillText(nameInput+(frame%40<25?"_":""),fX+8,195);
   if(nameInput.length>0&&containsProfanity(nameInput)){ctx.fillStyle=C.red;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2716",fX+fW-8,195)}
   else if(nameInput.trim().length>=2){ctx.fillStyle=C.green;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2714",fX+fW-8,195)}
-  const cA=activeField==="company";
-  ctx.fillStyle=C.steel;ctx.font="bold 9px 'Courier New'";ctx.textAlign="left";ctx.fillText("COMPANY (OPTIONAL)",fX,220);
-  dp(fX,224,fW,fH,cA?"#1A1A30":"#111118");ctx.strokeStyle=cA?C.green:C.steel+"60";ctx.lineWidth=cA?2:1;ctx.strokeRect(fX,224,fW,fH);
-  ctx.fillStyle=C.linen;ctx.font="14px 'Courier New'";ctx.textAlign="left";
-  ctx.fillText(companyInput+(cA&&frame%40<25?"_":""),fX+8,243);
-  if(companyInput.length>0&&containsProfanity(companyInput)){ctx.fillStyle=C.red;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2716",fX+fW-8,243)}
-  else if(companyInput.trim().length>=1){ctx.fillStyle=C.green;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2714",fX+fW-8,243)}
-  ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.textAlign="center";ctx.fillText("TAB TO SWITCH FIELDS  \xB7  ENTER TO SUBMIT",cx2,272);
-  if(nameSubmitted){ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("SUBMITTING...",cx2,295)}
-  else if(entryError){ctx.fillStyle=C.red;ctx.font="bold 11px 'Courier New'";ctx.fillText("\u26A0 "+entryError+" \u26A0",cx2,290);ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.fillText("FIX AND TRY AGAIN",cx2,305)}
-  else if(nameInput.trim().length===0){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("TYPE YOUR NAME TO CONTINUE",cx2,295)}
-  else{ctx.globalAlpha=0.5+Math.sin(frame*0.08)*0.4;ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("\u25B6 PRESS ENTER TO SUBMIT \u25C0",cx2,295);ctx.globalAlpha=1}
-  drawLeaderboard(cx2-160,320,320);
+  ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.textAlign="center";ctx.fillText("ENTER TO SUBMIT",cx2,222);
+  if(nameSubmitted){ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("SUBMITTING...",cx2,250)}
+  else if(entryError){ctx.fillStyle=C.red;ctx.font="bold 11px 'Courier New'";ctx.fillText("\u26A0 "+entryError+" \u26A0",cx2,245);ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.fillText("FIX AND TRY AGAIN",cx2,260)}
+  else if(nameInput.trim().length===0){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("TYPE YOUR NAME TO CONTINUE",cx2,250)}
+  else{ctx.globalAlpha=0.5+Math.sin(frame*0.08)*0.4;ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("\u25B6 PRESS ENTER TO SUBMIT \u25C0",cx2,250);ctx.globalAlpha=1}
+  drawLeaderboard(cx2-160,280,320);
   ctx.fillStyle=C.steel;ctx.font="7px 'Courier New'";ctx.textAlign="center";ctx.fillText("#FIGHTCAC  \xB7  POSTPILOT.COM/ACQUISITIONAI",cx2,H-10)}
 
 function drawScoreHUD(){ctx.fillStyle=C.gold;ctx.font="bold 9px 'Courier New'";ctx.textAlign="center";ctx.fillText("SCORE: "+gameScore,W/2,H-8)}
