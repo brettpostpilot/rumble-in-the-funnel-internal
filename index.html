@@ -32,9 +32,46 @@ const P1_INFO={name:'DREW "THE POSTMAN" SANOCKI',shortName:"THE POSTMAN",tagline
 const P2_INFO={name:'MIKE "CAC ATTACK" EPSTEIN',shortName:"CAC ATTACK",tagline:"YOUR ROAS ENDS HERE.",record:"66-6 (60 KOs)",style:"BRAWLER",from:"THE ALGORITHM",height:'5\'6"',weight:"240 LBS"};
 
 const keys={},justPressed={};
-document.addEventListener("keydown",e=>{if(!keys[e.key])justPressed[e.key]=true;keys[e.key]=true;e.preventDefault()});
+document.addEventListener("keydown",e=>{
+  if(screen==="enterName"){
+    if(e.key==="Tab"){e.preventDefault();activeField=activeField==="name"?"company":"name";return}
+    if(e.key==="Enter"){e.preventDefault();if(nameSubmitted)return;const err=validateEntry(nameInput,companyInput);if(err){entryError=err;return}entryError="";if(containsProfanity(nameInput)||containsProfanity(companyInput)){entryError="KEEP IT CLEAN, CHAMP!";return}nameSubmitted=true;submitScore(nameInput.trim(),companyInput.trim()||"\u2014",gameScore).then(()=>{screen="matchEnd";matchEndTimer=0});return}
+    if(e.key==="Backspace"){e.preventDefault();entryError="";if(activeField==="name")nameInput=nameInput.slice(0,-1);else companyInput=companyInput.slice(0,-1);return}
+    if(e.key.length===1&&!e.ctrlKey&&!e.metaKey){e.preventDefault();entryError="";if(activeField==="name"&&nameInput.length<20)nameInput+=e.key;else if(activeField==="company"&&companyInput.length<25)companyInput+=e.key;return}
+    e.preventDefault();return}
+  if(!keys[e.key])justPressed[e.key]=true;keys[e.key]=true;e.preventDefault()});
 document.addEventListener("keyup",e=>{keys[e.key]=false});
+document.addEventListener("paste",e=>{
+  if(screen!=="enterName")return;e.preventDefault();
+  const text=(e.clipboardData||window.clipboardData).getData("text").replace(/[\r\n\t]/g,"");
+  if(!text)return;if(containsProfanity(text)){entryError="KEEP IT CLEAN, CHAMP!";return}entryError="";
+  if(activeField==="name")nameInput=(nameInput+text).substring(0,20);else companyInput=(companyInput+text).substring(0,25)});
 const PK={left:"ArrowLeft",right:"ArrowRight",up:"ArrowUp",down:"ArrowDown",jab:"z",hook:"x",upper:"c",special:"v"};
+
+// ═══════ FIREBASE ═══════
+const FIREBASE_URL="https://fight-cac-default-rtdb.firebaseio.com";
+const LB_PATH="/leaderboard-internal";
+let leaderboard=[],leaderboardLoaded=false,entryError="";
+
+async function fetchLeaderboard(){
+  try{const res=await fetch(FIREBASE_URL+LB_PATH+".json");const data=await res.json();
+    leaderboard=data?Object.values(data).sort((a,b)=>b.score-a.score).slice(0,10):[];leaderboardLoaded=true;
+  }catch(e){console.warn("LB fetch:",e);leaderboardLoaded=true}}
+
+async function submitScore(name,company,score){
+  if(containsProfanity(name)||containsProfanity(company)){entryError="KEEP IT CLEAN, CHAMP!";nameSubmitted=false;return}
+  try{await fetch(FIREBASE_URL+LB_PATH+".json",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name,company,score,date:new Date().toISOString()})});await fetchLeaderboard()}catch(e){console.warn("Submit:",e)}}
+fetchLeaderboard();
+
+// ═══════ PROFANITY FILTER ═══════
+const BLOCKED_WORDS=["fuck","shit","ass","damn","bitch","bastard","dick","cock","pussy","cunt","whore","slut","fag","faggot","nigger","nigga","retard","rape","penis","vagina","boob","tits","titty","anus","dildo","jizz","cum","wank","piss","crap","twat","douche","hoe","milf","porn","sexy","nude","naked","erotic","orgasm","blowjob","handjob","butthole","asshole","dumbass","jackass","dipshit","bullshit","motherfuck","fucker","stfu","wtf","lmao","thot","simp","incel","nazi","hitler","kill","murder","suicide","terrorist","bomb","shoot","drug","cocaine","heroin","meth","weed","marijuana"];
+function normalizeText(t){return t.toLowerCase().replace(/[@4]/g,"a").replace(/[3]/g,"e").replace(/[1!|]/g,"i").replace(/[0]/g,"o").replace(/[5\$]/g,"s").replace(/[7]/g,"t").replace(/[+]/g,"t").replace(/ph/g,"f").replace(/[^a-z]/g,"")}
+function containsProfanity(t){if(!t||!t.trim())return false;const n=normalizeText(t);for(const w of BLOCKED_WORDS)if(n.includes(w))return true;const s=t.toLowerCase().replace(/[^a-z]/g,"");for(const w of BLOCKED_WORDS)if(s.includes(w))return true;const words=t.toLowerCase().split(/\s+/);for(const wd of words){const c=wd.replace(/[^a-z]/g,"");for(const b of BLOCKED_WORDS)if(c===b)return true}return false}
+function validateEntry(name,company){if(name.trim().length===0)return"ENTER YOUR NAME";if(name.trim().length<2)return"NAME TOO SHORT";if(containsProfanity(name))return"KEEP IT CLEAN, CHAMP!";if(company&&containsProfanity(company))return"KEEP IT CLEAN, CHAMP!";if(/^(.)\1{4,}$/.test(name.trim()))return"NICE TRY \u2014 ENTER A REAL NAME";return null}
+
+// ═══════ SCORING ═══════
+let gameScore=0,nameInput="",companyInput="",activeField="name",nameSubmitted=false;
 
 const GROUND=320,GRAVITY=0.42,WALK_SPD=2.1,JUMP_FORCE=-9,PUSH_DIST=50,RING_L=55,RING_R=W-55;
 const ATTACKS={
@@ -62,7 +99,7 @@ function resetRound(){
   roundTimer=99;timerAccum=0;roundEndTimer=0;hitSpark=null;screenShake=0;
   announceText="ROUND "+roundNum;announceTimer=90;screen="fighting";
 }
-function startMatch(){pWins=0;vWins=0;roundNum=1;screen="intro";introTimer=0;}
+function startMatch(){pWins=0;vWins=0;roundNum=1;gameScore=0;nameInput="";companyInput="";activeField="name";nameSubmitted=false;entryError="";screen="intro";introTimer=0;}
 
 function dp(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
 function dc(x,y,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.arc(Math.round(x),Math.round(y),r,0,Math.PI*2);ctx.fill()}
@@ -251,9 +288,11 @@ function updateFighter(p,opp,ctrl,isAI){
       if(Math.abs(p.x-opp.x)<atk.range+30){
         p.hitThisAttack=true;
         const oppBlk=opp.blocking&&opp.onGround&&opp.state!=="attack"&&opp.state!=="hitstun"&&!opp.stunned;
-        if(oppBlk){opp.state="blockstun";opp.stunFrames=atk.blockstun;opp.hp-=Math.max(1,Math.floor(atk.dmg*0.12));opp.vx=p.facing*atk.push*0.4;opp.hitDir=p.facing;p.special=Math.min(p.maxSpecial,p.special+10);hitSpark={x:(p.x+opp.x)/2,y:opp.y-40,frame:0,big:false};screenShake=3}
+        if(oppBlk){opp.state="blockstun";opp.stunFrames=atk.blockstun;opp.hp-=Math.max(1,Math.floor(atk.dmg*0.12));opp.vx=p.facing*atk.push*0.4;opp.hitDir=p.facing;p.special=Math.min(p.maxSpecial,p.special+10);hitSpark={x:(p.x+opp.x)/2,y:opp.y-40,frame:0,big:false};screenShake=3;
+          if(p.isPlayer)gameScore+=25}
         else{opp.state="hitstun";opp.stunFrames=atk.hitstun;opp.hp-=atk.dmg;opp.vx=p.facing*atk.push;opp.hitDir=p.facing;p.special=Math.min(p.maxSpecial,p.special+(isSp?0:20));
           opp.special=Math.min(opp.maxSpecial,opp.special+12);
+          if(p.isPlayer){const pts=isSp?300:(aN==="uppercut"?150:aN==="hook"?100:50);gameScore+=pts}
           if((aN==="uppercut"||isSp)&&opp.onGround){opp.vy=isSp?-12:-7;opp.onGround=false}
           if(aN==="special_p2"&&opp.hp>0){opp.stunned=true;opp.stunTimer=120;opp.state="idle";announceText="\u26A1 CAC ATTACK! \u26A1";announceTimer=60}
           if(aN==="special_p1"){opp.vx=p.facing*10;opp.vy=-11;screenShake=10;announceText="\uD83D\uDD25 SPECIAL DELIVERY! \uD83D\uDD25";announceTimer=60}
@@ -289,8 +328,10 @@ function update(){
   frame++;if(announceTimer>0)announceTimer--;
   if(screen==="title"){if(keys["Enter"]||keys["1"]||justPressed["z"]||justPressed[" "])startMatch();Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
   if(screen==="intro"){introTimer++;if(introTimer>200||keys["Enter"]||justPressed["z"]||justPressed[" "])resetRound();Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
-  if(screen==="roundEnd"){roundEndTimer++;if(roundEndTimer>120){if(pWins>=2){screen="matchEnd";matchEndTimer=0}else if(vWins>=2){screen="matchEnd";matchEndTimer=0}else if(roundNum>=3){screen="matchEnd";matchEndTimer=0}else{roundNum++;resetRound()}}Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
-  if(screen==="matchEnd"){matchEndTimer++;if(matchEndTimer>120&&(keys["Enter"]||keys["1"]||justPressed["z"]||justPressed[" "]))screen="title";Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
+  if(screen==="roundEnd"){roundEndTimer++;if(roundEndTimer>120){if(pWins>=2){screen="enterName";nameInput="";companyInput="";activeField="name";nameSubmitted=false;entryError=""}else if(vWins>=2){screen="matchEnd";matchEndTimer=0}else if(roundNum>=3){if(pWins>vWins){screen="enterName";nameInput="";companyInput="";activeField="name";nameSubmitted=false;entryError=""}else{screen="matchEnd";matchEndTimer=0}}else{roundNum++;resetRound()}}Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
+  if(screen==="matchEnd"){matchEndTimer++;if(matchEndTimer>120&&(keys["Enter"]||keys["1"]||justPressed["z"]||justPressed[" "])){screen="title";fetchLeaderboard()}Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
+  if(screen==="enterName"){Object.keys(justPressed).forEach(k=>justPressed[k]=false);return}
+  if(screen==="matchEnd"&&matchEndTimer===0)fetchLeaderboard();
   updateAI(villain,player);
   updateFighter(player,villain,PK,false);
   updateFighter(villain,player,null,true);
@@ -299,7 +340,7 @@ function update(){
   if(screenShake>0)screenShake--;
   timerAccum++;if(timerAccum>=60){timerAccum=0;roundTimer=Math.max(0,roundTimer-1)}
   if((player.hp<=0&&player.state==="knockdown"&&player.onGround)||(villain.hp<=0&&villain.state==="knockdown"&&villain.onGround)||roundTimer<=0){
-    if(player.hp>villain.hp)pWins++;else if(villain.hp>player.hp)vWins++;else{pWins+=0.5;vWins+=0.5}
+    if(player.hp>villain.hp){pWins++;gameScore+=500+player.hp*10+Math.max(0,roundTimer)*5}else if(villain.hp>player.hp)vWins++;else{pWins+=0.5;vWins+=0.5}
     screen="roundEnd";roundEndTimer=0;
     announceText=player.hp>villain.hp?"THE POSTMAN DELIVERS!":"CAC ATTACK WINS!";announceTimer=120}
   Object.keys(justPressed).forEach(k=>justPressed[k]=false);
@@ -357,19 +398,18 @@ function drawAnnounce(){if(announceTimer<=0)return;const cx2=W/2,al=Math.min(1,a
 
 function drawTitle(){
   drawRing();ctx.fillStyle="rgba(6,6,12,0.8)";ctx.fillRect(0,0,W,H);const cx2=W/2;
-  ctx.fillStyle=C.lime;ctx.font="bold 10px 'Courier New'";ctx.textAlign="center";ctx.fillText("POSTPILOT PRESENTS",cx2,55);
-  ctx.fillStyle=C.linen;ctx.font="bold 38px 'Courier New'";ctx.fillText("ACQUISITIONAI",cx2,100);
-  dp(cx2-180,112,360,34,C.green);ctx.fillStyle=C.charcoal;ctx.font="bold 22px 'Courier New'";ctx.fillText("RUMBLE IN THE FUNNEL",cx2,136);
-  ctx.fillStyle=C.green;ctx.font="bold 14px 'Courier New'";ctx.fillText("DREW vs EPSTEIN",cx2,178);
-  ctx.fillStyle=C.green;ctx.font="bold 11px 'Courier New'";ctx.fillText(P1_INFO.shortName,cx2-130,210);
-  ctx.fillStyle="rgba(255,255,255,0.15)";ctx.font="bold 18px 'Courier New'";ctx.fillText("VS",cx2,215);
-  ctx.fillStyle=C.metaBlue;ctx.font="bold 11px 'Courier New'";ctx.fillText(P2_INFO.shortName,cx2+130,210);
-  ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText(P1_INFO.height+" \xB7 "+P1_INFO.weight,cx2-130,228);
-  ctx.fillText(P2_INFO.height+" \xB7 "+P2_INFO.weight,cx2+130,228);
-  ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";
-  ctx.fillText("\u2190 \u2192 MOVE  \u2191 JUMP  \u2193 CROUCH  Z JAB  X HOOK  C UPPER  V SPECIAL",cx2,270);
-  ctx.globalAlpha=0.4+Math.sin(frame*0.06)*0.4;ctx.fillStyle=C.linen;ctx.font="bold 16px 'Courier New'";ctx.fillText("\u25B6 PRESS ENTER TO START \u25C0",cx2,320);ctx.globalAlpha=1;
-  ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.fillText("SHOPTALK 2026  \xB7  #FIGHTCAC  \xB7  POSTPILOT.COM/ACQUISITIONAI",cx2,360);
+  ctx.fillStyle=C.lime;ctx.font="bold 10px 'Courier New'";ctx.textAlign="center";ctx.fillText("POSTPILOT PRESENTS",cx2,40);
+  ctx.fillStyle=C.linen;ctx.font="bold 34px 'Courier New'";ctx.fillText("ACQUISITIONAI",cx2,75);
+  dp(cx2-170,85,340,28,C.green);ctx.fillStyle=C.charcoal;ctx.font="bold 18px 'Courier New'";ctx.fillText("RUMBLE IN THE FUNNEL",cx2,106);
+  ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("DREW vs EPSTEIN",cx2,138);
+  ctx.fillStyle=C.green;ctx.font="bold 10px 'Courier New'";ctx.fillText(P1_INFO.shortName,cx2-100,158);
+  ctx.fillStyle="rgba(255,255,255,0.15)";ctx.font="bold 14px 'Courier New'";ctx.fillText("VS",cx2,161);
+  ctx.fillStyle=C.metaBlue;ctx.font="bold 10px 'Courier New'";ctx.fillText(P2_INFO.shortName,cx2+100,158);
+  drawLeaderboard(cx2-160,178,320);
+  ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.textAlign="center";
+  ctx.fillText("\u2190 \u2192 MOVE  \u2191 JUMP  \u2193 CROUCH  Z JAB  X HOOK  C UPPER  V SPECIAL",cx2,H-50);
+  ctx.globalAlpha=0.4+Math.sin(frame*0.06)*0.4;ctx.fillStyle=C.linen;ctx.font="bold 16px 'Courier New'";ctx.fillText("\u25B6 PRESS ENTER TO START \u25C0",cx2,H-25);ctx.globalAlpha=1;
+  ctx.fillStyle=C.steel;ctx.font="7px 'Courier New'";ctx.fillText("SHOPTALK 2026  \xB7  #FIGHTCAC  \xB7  POSTPILOT.COM/ACQUISITIONAI",cx2,H-8);
 }
 
 function drawIntro(){
@@ -408,37 +448,85 @@ function drawMatchEnd(){
   drawRing();ctx.fillStyle="rgba(6,6,12,0.8)";ctx.fillRect(0,0,W,H);
   const cx2=W/2,t=matchEndTimer,winner=pWins>vWins;
   for(let i=0;i<80;i++){const seed=i*73,cx3=(seed*3.7+t*(1.2+(seed%3)))%W,cy=(seed*2.1+t*(1.8+(seed%2)))%(H+40)-20;ctx.fillStyle=[C.green,C.lime,C.gold,"#FFF",C.orange][seed%5];ctx.globalAlpha=0.7;ctx.fillRect(cx3,cy,4+seed%3,2+seed%2)}ctx.globalAlpha=1;
-  ctx.fillStyle=C.lime;ctx.font="bold 10px 'Courier New'";ctx.textAlign="center";ctx.fillText("POSTPILOT PRESENTS",cx2,50);
+  ctx.fillStyle=C.lime;ctx.font="bold 10px 'Courier New'";ctx.textAlign="center";ctx.fillText("POSTPILOT PRESENTS",cx2,35);
   if(winner){
-    const bY=85;dp(cx2-140,bY,280,22,"#5A3A1A");
-    const pg=ctx.createLinearGradient(cx2-65,bY-10,cx2-65,bY+50);pg.addColorStop(0,"#FFD700");pg.addColorStop(0.3,"#FFF0A0");pg.addColorStop(0.6,"#FFD700");pg.addColorStop(1,"#B8860B");
-    ctx.fillStyle=pg;ctx.fillRect(cx2-65,bY-10,130,50);ctx.strokeStyle="#B8860B";ctx.lineWidth=3;ctx.strokeRect(cx2-65,bY-10,130,50);
-    ctx.fillStyle="#DAA520";ctx.fillRect(cx2-105,bY-2,35,28);ctx.fillRect(cx2+70,bY-2,35,28);
-    ctx.fillStyle="#8B6914";ctx.font="bold 9px 'Courier New'";ctx.fillText("ACQUISITIONAI",cx2,bY+16);ctx.font="bold 7px 'Courier New'";ctx.fillText("\u2605 KING OF ACQUISITION \u2605",cx2,bY+28);
-    ctx.fillStyle=C.gold;ctx.font="bold 26px 'Courier New'";ctx.fillText("\u2605 NEW CHAMPION \u2605",cx2,175);
-    ctx.fillStyle=C.green;ctx.font="bold 20px 'Courier New'";ctx.fillText(P1_INFO.shortName,cx2,205);
-    ctx.fillStyle=C.linen;ctx.font="bold 12px 'Courier New'";ctx.fillText(P1_INFO.name,cx2,228);
-    ctx.fillStyle=C.green;ctx.font="bold 14px 'Courier New'";ctx.fillText("GROWTH IS IN THE MAIL",cx2,260);
+    const bY=65;dp(cx2-130,bY,260,20,"#5A3A1A");
+    const pg=ctx.createLinearGradient(cx2-60,bY-8,cx2-60,bY+42);pg.addColorStop(0,"#FFD700");pg.addColorStop(0.3,"#FFF0A0");pg.addColorStop(0.6,"#FFD700");pg.addColorStop(1,"#B8860B");
+    ctx.fillStyle=pg;ctx.fillRect(cx2-60,bY-8,120,42);ctx.strokeStyle="#B8860B";ctx.lineWidth=2;ctx.strokeRect(cx2-60,bY-8,120,42);
+    ctx.fillStyle="#DAA520";ctx.fillRect(cx2-95,bY,30,22);ctx.fillRect(cx2+65,bY,30,22);
+    ctx.fillStyle="#8B6914";ctx.font="bold 8px 'Courier New'";ctx.fillText("ACQUISITIONAI",cx2,bY+14);ctx.font="bold 6px 'Courier New'";ctx.fillText("\u2605 KING OF ACQUISITION \u2605",cx2,bY+24);
+    ctx.fillStyle=C.gold;ctx.font="bold 20px 'Courier New'";ctx.fillText("\u2605 NEW CHAMPION \u2605",cx2,140);
+    ctx.fillStyle=C.green;ctx.font="bold 16px 'Courier New'";ctx.fillText(P1_INFO.shortName,cx2,162);
+    ctx.fillStyle=C.green;ctx.font="bold 11px 'Courier New'";ctx.fillText("GROWTH IS IN THE MAIL",cx2,182);
+    ctx.fillStyle=C.linen;ctx.font="bold 10px 'Courier New'";ctx.fillText("FINAL SCORE: "+gameScore,cx2,200);
   }else{
-    ctx.fillStyle=C.metaBlue;ctx.font="bold 26px 'Courier New'";ctx.fillText("EPSTEIN WINS!",cx2,120);
-    ctx.fillStyle=C.linen;ctx.font="bold 14px 'Courier New'";ctx.fillText("THE CAC ATTACK PREVAILS",cx2,160);
-    ctx.fillStyle=C.steel;ctx.font="12px 'Courier New'";ctx.fillText("BUT THE POSTMAN NEVER STAYS DOWN",cx2,200);
+    ctx.fillStyle=C.metaBlue;ctx.font="bold 22px 'Courier New'";ctx.fillText("EPSTEIN WINS!",cx2,80);
+    ctx.fillStyle=C.linen;ctx.font="bold 12px 'Courier New'";ctx.fillText("THE CAC ATTACK PREVAILS",cx2,110);
+    ctx.fillStyle=C.steel;ctx.font="10px 'Courier New'";ctx.fillText("BUT THE POSTMAN NEVER STAYS DOWN",cx2,135);
+    ctx.fillStyle=C.linen;ctx.font="bold 10px 'Courier New'";ctx.fillText("SCORE: "+gameScore,cx2,160);
   }
-  ctx.fillStyle=C.green;ctx.font="bold 10px 'Courier New'";ctx.fillText("POSTPILOT.COM/ACQUISITIONAI",cx2,300);
-  ctx.fillStyle=C.lime;ctx.fillText("#FIGHTCAC",cx2,318);
-  if(t>120){ctx.globalAlpha=0.4+Math.sin(t*0.06)*0.4;ctx.fillStyle=C.linen;ctx.font="bold 12px 'Courier New'";ctx.fillText("PRESS ENTER TO PLAY AGAIN",cx2,350);ctx.globalAlpha=1}
+  drawLeaderboard(cx2-160,215,320);
+  ctx.fillStyle=C.green;ctx.font="bold 9px 'Courier New'";ctx.textAlign="center";ctx.fillText("POSTPILOT.COM/ACQUISITIONAI",cx2,H-30);
+  ctx.fillStyle=C.lime;ctx.font="9px 'Courier New'";ctx.fillText("#FIGHTCAC",cx2,H-18);
+  if(t>120){ctx.globalAlpha=0.4+Math.sin(t*0.06)*0.4;ctx.fillStyle=C.linen;ctx.font="bold 11px 'Courier New'";ctx.fillText("PRESS ENTER TO PLAY AGAIN",cx2,H-4);ctx.globalAlpha=1}
 }
+
+function drawLeaderboard(startX,startY,maxW){
+  const cx2=startX+maxW/2;
+  ctx.fillStyle=C.gold;ctx.font="bold 11px 'Courier New'";ctx.textAlign="center";ctx.fillText("\u2605 TOP FIGHTERS \u2605",cx2,startY);
+  if(!leaderboardLoaded){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("Loading...",cx2,startY+18);return startY+30}
+  if(leaderboard.length===0){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("No scores yet \u2014 be the first!",cx2,startY+18);return startY+30}
+  const cR=startX+4,cN=startX+24,cC=startX+maxW*0.55,cS=startX+maxW-4;let ly=startY+16;
+  ctx.fillStyle=C.steel;ctx.font="bold 8px 'Courier New'";ctx.textAlign="left";ctx.fillText("#",cR,ly);ctx.fillText("NAME",cN,ly);ctx.fillText("COMPANY",cC,ly);ctx.textAlign="right";ctx.fillText("SCORE",cS,ly);
+  ly+=4;dp(startX,ly,maxW,1,C.steel+"40");ly+=8;
+  leaderboard.forEach((entry,i)=>{const top3=i<3;ctx.textAlign="left";ctx.fillStyle=top3?C.gold:C.linen;ctx.font=(top3?"bold ":"")+"9px 'Courier New'";
+    ctx.fillText(String(i+1),cR,ly);ctx.fillStyle=top3?C.green:C.linen;ctx.fillText((entry.name||"???").substring(0,16),cN,ly);
+    ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText((entry.company||"\u2014").substring(0,14),cC,ly);
+    ctx.textAlign="right";ctx.fillStyle=top3?C.gold:C.lime;ctx.fillText(String(entry.score||0),cS,ly);ly+=14});return ly}
+
+function drawEnterName(){
+  drawRing();ctx.fillStyle="rgba(6,6,12,0.88)";ctx.fillRect(0,0,W,H);const cx2=W/2;
+  for(let i=0;i<40;i++){const seed=i*73,t=frame,cx3=(seed*3.7+t*(0.8+(seed%3)))%W,cy=(seed*2.1+t*(1.2+(seed%2)))%(H+40)-20;ctx.fillStyle=[C.green,C.lime,C.gold,"#FFF",C.orange][seed%5];ctx.globalAlpha=0.5;ctx.fillRect(cx3,cy,3+seed%3,2)}ctx.globalAlpha=1;
+  ctx.fillStyle=C.gold;ctx.font="bold 22px 'Courier New'";ctx.textAlign="center";ctx.fillText("\u2605 VICTORY! \u2605",cx2,50);
+  ctx.fillStyle=C.green;ctx.font="bold 14px 'Courier New'";ctx.fillText("THE POSTMAN DELIVERS!",cx2,75);
+  ctx.fillStyle=C.linen;ctx.font="bold 28px 'Courier New'";ctx.fillText("SCORE: "+gameScore,cx2,110);
+  ctx.fillStyle=C.lime;ctx.font="bold 10px 'Courier New'";ctx.fillText("ENTER YOUR NAME FOR THE LEADERBOARD",cx2,148);
+  const fW=260,fH=28,fX=cx2-fW/2;
+  const nA=activeField==="name";
+  ctx.fillStyle=C.steel;ctx.font="bold 9px 'Courier New'";ctx.textAlign="left";ctx.fillText("YOUR NAME",fX,172);
+  dp(fX,176,fW,fH,nA?"#1A1A30":"#111118");ctx.strokeStyle=nA?C.green:C.steel+"60";ctx.lineWidth=nA?2:1;ctx.strokeRect(fX,176,fW,fH);
+  ctx.fillStyle=C.linen;ctx.font="14px 'Courier New'";ctx.textAlign="left";
+  ctx.fillText(nameInput+(nA&&frame%40<25?"_":""),fX+8,195);
+  if(nameInput.length>0&&containsProfanity(nameInput)){ctx.fillStyle=C.red;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2716",fX+fW-8,195)}
+  else if(nameInput.trim().length>=2){ctx.fillStyle=C.green;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2714",fX+fW-8,195)}
+  const cA=activeField==="company";
+  ctx.fillStyle=C.steel;ctx.font="bold 9px 'Courier New'";ctx.textAlign="left";ctx.fillText("COMPANY (OPTIONAL)",fX,220);
+  dp(fX,224,fW,fH,cA?"#1A1A30":"#111118");ctx.strokeStyle=cA?C.green:C.steel+"60";ctx.lineWidth=cA?2:1;ctx.strokeRect(fX,224,fW,fH);
+  ctx.fillStyle=C.linen;ctx.font="14px 'Courier New'";ctx.textAlign="left";
+  ctx.fillText(companyInput+(cA&&frame%40<25?"_":""),fX+8,243);
+  if(companyInput.length>0&&containsProfanity(companyInput)){ctx.fillStyle=C.red;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2716",fX+fW-8,243)}
+  else if(companyInput.trim().length>=1){ctx.fillStyle=C.green;ctx.font="bold 9px 'Courier New'";ctx.textAlign="right";ctx.fillText("\u2714",fX+fW-8,243)}
+  ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.textAlign="center";ctx.fillText("TAB TO SWITCH FIELDS  \xB7  ENTER TO SUBMIT",cx2,272);
+  if(nameSubmitted){ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("SUBMITTING...",cx2,295)}
+  else if(entryError){ctx.fillStyle=C.red;ctx.font="bold 11px 'Courier New'";ctx.fillText("\u26A0 "+entryError+" \u26A0",cx2,290);ctx.fillStyle=C.steel;ctx.font="8px 'Courier New'";ctx.fillText("FIX AND TRY AGAIN",cx2,305)}
+  else if(nameInput.trim().length===0){ctx.fillStyle=C.steel;ctx.font="9px 'Courier New'";ctx.fillText("TYPE YOUR NAME TO CONTINUE",cx2,295)}
+  else{ctx.globalAlpha=0.5+Math.sin(frame*0.08)*0.4;ctx.fillStyle=C.green;ctx.font="bold 12px 'Courier New'";ctx.fillText("\u25B6 PRESS ENTER TO SUBMIT \u25C0",cx2,295);ctx.globalAlpha=1}
+  drawLeaderboard(cx2-160,320,320);
+  ctx.fillStyle=C.steel;ctx.font="7px 'Courier New'";ctx.textAlign="center";ctx.fillText("#FIGHTCAC  \xB7  POSTPILOT.COM/ACQUISITIONAI",cx2,H-10)}
+
+function drawScoreHUD(){ctx.fillStyle=C.gold;ctx.font="bold 9px 'Courier New'";ctx.textAlign="center";ctx.fillText("SCORE: "+gameScore,W/2,H-8)}
 
 function draw(){
   ctx.save();
   if(screenShake>0)ctx.translate(Math.sin(frame*1.5)*screenShake,Math.cos(frame*1.8)*screenShake*0.5);
   if(screen==="title"){drawTitle();ctx.restore();return}
   if(screen==="intro"){drawIntro();ctx.restore();return}
+  if(screen==="enterName"){drawEnterName();ctx.restore();return}
   if(screen==="matchEnd"){drawMatchEnd();ctx.restore();return}
   drawRing();
   if(player.y<=villain.y){drawBoxer(player,true);drawBoxer(villain,false)}
   else{drawBoxer(villain,false);drawBoxer(player,true)}
-  drawHitSpark();drawHUD();drawAnnounce();
+  drawHitSpark();drawHUD();drawScoreHUD();drawAnnounce();
   if(screen==="roundEnd"){
     ctx.fillStyle="rgba(6,6,12,0.6)";ctx.fillRect(0,150,W,80);
     const cx2=W/2,w=player.hp>villain.hp;
